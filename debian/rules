@@ -46,11 +46,9 @@ install: build
 	dh_clean -k 
 	dh_installdirs
 
-	# Add here commands to install the package into debian/mintupdate.
-	#$(MAKE) install DESTDIR=$(CURDIR)/debian/mintupdate
-	mkdir -p $(CURDIR)/debian/mintupdate
-	cp -r $(CURDIR)/usr $(CURDIR)/debian/mintupdate/
-	cp -r $(CURDIR)/etc $(CURDIR)/debian/mintupdate/
+	mkdir -p $(CURDIR)/debian/mintupdate-debian
+	cp -r $(CURDIR)/usr $(CURDIR)/debian/mintupdate-debian/
+	cp -r $(CURDIR)/etc $(CURDIR)/debian/mintupdate-debian/
 
 # Build architecture-independent files here.
 binary-indep: build install
