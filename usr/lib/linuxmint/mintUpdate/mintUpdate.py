@@ -355,7 +355,7 @@ class InstallThread(threading.Thread):
                     self.wTree.get_widget("window1").hide()
                     gtk.gdk.threads_leave()
 
-                    if "mintupdate" in packages:
+                    if ("mintupdate" in packages) or ("mintupdate-debian" in packages):
                         # Restart
                         try:
                             log.writelines("++ Mintupdate was updated, restarting it in root mode...\n")
@@ -547,7 +547,7 @@ class RefreshThread(threading.Thread):
                         strSize = size_to_string(size)
 
                         if (new_mintupdate):
-                            if (package == "mintupdate"):
+                            if (package == "mintupdate") or (package == "mintupdate-debian"):
                                 list_of_packages = list_of_packages + " " + package
                                 iter = model.insert_before(None, None)
                                 model.set_value(iter, INDEX_UPGRADE, "true")
