@@ -56,7 +56,7 @@ else:
         libc.call('prctl', 15, 'mintUpdate', 0, 0, 0)
 
 # i18n
-gettext.install("mintupdate", "/usr/share/linuxmint/locale")
+gettext.install("mintupdate-debian", "/usr/share/linuxmint/locale")
 
 # i18n for menu item
 menuName = _("Update Manager")
@@ -64,23 +64,38 @@ menuGenericName = _("Software Updates")
 menuComment = _("Show and install available updates")
 
 
+# Indexes for main model
+INDEX_UPGRADE = 0
+INDEX_PACKAGE_NAME = 1
+INDEX_OLD_VERSION = 2
+INDEX_NEW_VERSION = 3
+INDEX_SIZE = 4
+INDEX_STR_SIZE = 5
+INDEX_DESCRIPTION = 6
+INDEX_SOURCE_PACKAGE = 7
+
+# Indexes for history model
+INDEX_HISTORY_DATE = 0
+INDEX_HISTORY_PACKAGE_NAME = 1
+INDEX_HISTORY_OLD_VERSION = 2
+INDEX_HISTORY_NEW_VERSION = 3
+
 class ChangelogRetriever(threading.Thread):
-    def __init__(self, source_package, level, version, wTree):
+    def __init__(self, source_package, version, wTree):
         threading.Thread.__init__(self)
         self.source_package = source_package
-        self.level = level 
         self.version = version
         self.wTree = wTree
-           
-    def run(self):         
+
+    def run(self):
         gtk.gdk.threads_enter()
-        self.wTree.get_widget("textview_changes").get_buffer().set_text(_("Downloading changelog..."))  
-        gtk.gdk.threads_leave()       
-                    
-        changelog = ""        
-        if (self.level == 1) or ("mint" in self.version) or ("mint" in self.source_package):                        
-            #Get the mint change file for amd64              
-            try:                      
+        self.wTree.get_widget("textview_changes").get_buffer().set_text(_("Downloading changelog..."))
+        gtk.gdk.threads_leave()
+
+        changelog = ""
+        if ("mint" in self.version) or ("mint" in self.source_package):
+            #Get the mint change file for amd64
+            try:
                 url = urllib2.urlopen("http://packages.linuxmint.com/dev/" + self.source_package + "_" + self.version + "_amd64.changes", None, 30)
                 source = url.read()
                 url.close()
@@ -100,10 +115,10 @@ class ChangelogRetriever(threading.Thread):
                         if change.startswith("*"):
                             changelog = changelog + change + "\n"
                 except:
-                    changelog = _("No changelog available")                
-        else:            
+                    changelog = _("No changelog available")
+        else:
             try:
-                source = commands.getoutput("aptitude changelog " + self.source_package)                    
+                source = commands.getoutput("aptitude changelog " + self.source_package)
                 changes = source.split("urgency=")[1].split("\n")
                 for change in changes:
                     change = change.strip()
@@ -112,9 +127,9 @@ class ChangelogRetriever(threading.Thread):
             except Exception, detail:
                 print detail
                 changelog = _("No changelog available") + "\n" + _("Click on Edit->Software Sources and tick the 'Source code' option to enable access to the changelogs")
-                
-        gtk.gdk.threads_enter()                
-        self.wTree.get_widget("textview_changes").get_buffer().set_text(changelog)        
+
+        gtk.gdk.threads_enter()
+        self.wTree.get_widget("textview_changes").get_buffer().set_text(changelog)
         gtk.gdk.threads_leave()
 
 class AutomaticRefreshThread(threading.Thread):
@@ -195,14 +210,13 @@ class InstallThread(threading.Thread):
             iter = model.get_iter_first()
             history = open("/var/log/mintUpdate.history", "a")
             while (iter != None):
-                checked = model.get_value(iter, 0)
+                checked = model.get_value(iter, INDEX_UPGRADE)
                 if (checked == "true"):
                     installNeeded = True
-                    package = model.get_value(iter, 1)
-                    level = model.get_value(iter, 7)
-                    oldVersion = model.get_value(iter, 3)
-                    newVersion = model.get_value(iter, 4)
-                    history.write(commands.getoutput('date +"%Y.%m.%d %H:%M:%S"') + "\t" + package + "\t" + level + "\t" + oldVersion + "\t" + newVersion + "\n")
+                    package = model.get_value(iter, INDEX_PACKAGE_NAME)
+                    oldVersion = model.get_value(iter, INDEX_OLD_VERSION)
+                    newVersion = model.get_value(iter, INDEX_NEW_VERSION)
+                    history.write(commands.getoutput('date +"%Y.%m.%d %H:%M:%S"') + "\t" + package + "\t" + oldVersion + "\t" + newVersion + "\n")
                     packages.append(package)
                     log.writelines("++ Will install " + str(package) + "\n")
                     log.flush()
@@ -210,8 +224,8 @@ class InstallThread(threading.Thread):
             history.close()
 
             if (installNeeded == True):
-                                
-                proceed = True                
+
+                proceed = True
                 try:
                     pkgs = ' '.join(str(pkg) for pkg in packages)
                     warnings = commands.getoutput("/usr/lib/linuxmint/mintUpdate/checkWarnings.py %s" % pkgs)
@@ -219,24 +233,24 @@ class InstallThread(threading.Thread):
                     warnings = warnings.split("###")
                     if len(warnings) == 2:
                         installations = warnings[0].split()
-                        removals = warnings[1].split()                                    
+                        removals = warnings[1].split()
                         if len(installations) > 0 or len(removals) > 0:
                             gtk.gdk.threads_enter()
                             try:
                                 dialog = gtk.MessageDialog(None, gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK_CANCEL, None)
                                 dialog.set_title("")
                                 dialog.set_markup("<b>" + _("This upgrade will trigger additional changes") + "</b>")
-                                #dialog.format_secondary_markup("<i>" + _("All available upgrades for this package will be ignored.") + "</i>")                                
+                                #dialog.format_secondary_markup("<i>" + _("All available upgrades for this package will be ignored.") + "</i>")
                                 dialog.set_icon_from_file("/usr/lib/linuxmint/mintUpdate/icons/base.svg")
                                 dialog.set_default_size(640, 480)
-                                
+
                                 if len(removals) > 0:
                                     # Removals
                                     label = gtk.Label()
                                     if len(removals) == 1:
                                         label.set_text(_("The following package will be removed:"))
                                     else:
-                                        label.set_text(_("The following %d packages will be removed:") % len(removals))                                    
+                                        label.set_text(_("The following %d packages will be removed:") % len(removals))
                                     label.set_alignment(0, 0.5)
                                     scrolledWindow = gtk.ScrolledWindow()
                                     scrolledWindow.set_shadow_type(gtk.SHADOW_IN)
@@ -248,18 +262,18 @@ class InstallThread(threading.Thread):
                                     treeview.append_column(column1)
                                     treeview.set_headers_clickable(False)
                                     treeview.set_reorderable(False)
-                                    treeview.set_headers_visible(False)                                                        
+                                    treeview.set_headers_visible(False)
                                     model = gtk.TreeStore(str)
                                     removals.sort()
                                     for pkg in removals:
-                                        iter = model.insert_before(None, None)                                
+                                        iter = model.insert_before(None, None)
                                         model.set_value(iter, 0, pkg)
                                     treeview.set_model(model)
                                     treeview.show()
-                                    scrolledWindow.add(treeview)                                
+                                    scrolledWindow.add(treeview)
                                     dialog.vbox.add(label)
                                     dialog.vbox.add(scrolledWindow)
-                                
+
                                 if len(installations) > 0:
                                     # Installations
                                     label = gtk.Label()
@@ -278,38 +292,38 @@ class InstallThread(threading.Thread):
                                     treeview.append_column(column1)
                                     treeview.set_headers_clickable(False)
                                     treeview.set_reorderable(False)
-                                    treeview.set_headers_visible(False)                                                        
+                                    treeview.set_headers_visible(False)
                                     model = gtk.TreeStore(str)
                                     installations.sort()
                                     for pkg in installations:
-                                        iter = model.insert_before(None, None)                                
-                                        model.set_value(iter, 0, pkg)                               
+                                        iter = model.insert_before(None, None)
+                                        model.set_value(iter, 0, pkg)
                                     treeview.set_model(model)
                                     treeview.show()
-                                    scrolledWindow.add(treeview)   
-                                    dialog.vbox.add(label)                             
-                                    dialog.vbox.add(scrolledWindow)                                                            
-                                
-                                dialog.show_all()                
+                                    scrolledWindow.add(treeview)
+                                    dialog.vbox.add(label)
+                                    dialog.vbox.add(scrolledWindow)
+
+                                dialog.show_all()
                                 if dialog.run() == gtk.RESPONSE_OK:
                                     proceed = True
-                                else: 
+                                else:
                                     proceed = False
-                                dialog.destroy()  
+                                dialog.destroy()
                             except Exception, detail:
                                 print detail
-                            gtk.gdk.threads_leave()   
+                            gtk.gdk.threads_leave()
                         else:
                             proceed = True
-                except Exception, details: 
+                except Exception, details:
                     print details
-                                                                       
+
                 if proceed:
                     gtk.gdk.threads_enter()
                     self.statusIcon.set_from_file(icon_apply)
                     self.statusIcon.set_tooltip(_("Installing updates"))
                     gtk.gdk.threads_leave()
-                    
+
                     log.writelines("++ Ready to launch synaptic\n")
                     log.flush()
                     cmd = ["sudo", "/usr/sbin/synaptic", "--hide-main-window",  \
@@ -334,15 +348,15 @@ class InstallThread(threading.Thread):
                     f.close()
                     log.writelines("++ Install finished\n")
                     log.flush()
-                    
+
                     gtk.gdk.threads_enter()
                     global app_hidden
                     app_hidden = True
                     self.wTree.get_widget("window1").hide()
                     gtk.gdk.threads_leave()
-                    
+
                     if "mintupdate" in packages:
-                        # Restart                        
+                        # Restart
                         try:
                             log.writelines("++ Mintupdate was updated, restarting it in root mode...\n")
                             log.flush()
@@ -356,7 +370,7 @@ class InstallThread(threading.Thread):
                         self.statusIcon.set_from_file(icon_busy)
                         self.statusIcon.set_tooltip(_("Checking for updates"))
                         self.wTree.get_widget("window1").window.set_cursor(None)
-                        self.wTree.get_widget("window1").set_sensitive(True)                        
+                        self.wTree.get_widget("window1").set_sensitive(True)
                         gtk.gdk.threads_leave()
                         refresh = RefreshThread(self.treeView, self.statusIcon, self.wTree)
                         refresh.start()
@@ -426,11 +440,11 @@ class RefreshThread(threading.Thread):
             #self.statusIcon.set_blinking(True)
             gtk.gdk.threads_leave()
 
-            model = gtk.TreeStore(str, str, gtk.gdk.Pixbuf, str, str, str, str, str, object, int, str, str) # (check, packageName, level, oldVersion, newVersion, warning, extrainfo, stringLevel, description, size, stringSize, sourcePackage)
-            model.set_sort_column_id( 7, gtk.SORT_ASCENDING )         
+            model = gtk.TreeStore(str, str, str, str, int, str, str, str) # upgrade, pkgname, oldversion, newversion, size, strsize, description, sourcePackage)
+            model.set_sort_column_id( 1, gtk.SORT_ASCENDING )
 
             prefs = read_configuration()
-            
+
             # Check to see if no other APT process is running
             p1 = Popen(['ps', '-U', 'root', '-o', 'comm'], stdout=PIPE)
             p = p1.communicate()[0]
@@ -461,19 +475,18 @@ class RefreshThread(threading.Thread):
                 updates = commands.getoutput("/usr/lib/linuxmint/mintUpdate/checkAPT.py | grep \"###\"")
             else:
                 updates = commands.getoutput("/usr/lib/linuxmint/mintUpdate/checkAPT.py --use-synaptic %s | grep \"###\"" % self.wTree.get_widget("window1").window.xid)
-           
+
             # Look for mintupdate
-            if ("UPDATE###mintupdate###" in updates):                
+            if ("UPDATE###mintupdate###" in updates):
                 new_mintupdate = True
             else:
                 new_mintupdate = False
-           
-            updates = string.split(updates, "\n")                            
-                
+
+            updates = string.split(updates, "\n")
+
             # Look at the packages one by one
             list_of_packages = ""
-            num_visible = 0
-            num_safe = 0            
+            num_updates = 0            
             download_size = 0
             num_ignored = 0
             ignored_list = []
@@ -481,7 +494,7 @@ class RefreshThread(threading.Thread):
                 blacklist_file = open("/etc/linuxmint/mintupdate.ignored", "r")
                 for blacklist_line in blacklist_file:
                     ignored_list.append(blacklist_line.strip())
-                blacklist_file.close()                
+                blacklist_file.close()
 
             if (len(updates) == None):
                 self.statusIcon.set_from_file(icon_up2date)
@@ -533,92 +546,36 @@ class RefreshThread(threading.Thread):
 
                         strSize = size_to_string(size)
 
-                        level = 3 # Level 3 by default
-                        extraInfo = ""
-                        warning = ""
-                        rulesFile = open("/usr/lib/linuxmint/mintUpdate/rules","r")
-                        rules = rulesFile.readlines()
-                        goOn = True
-                        foundPackageRule = False # whether we found a rule with the exact package name or not
-                        for rule in rules:
-                            if (goOn == True):
-                                rule_fields = rule.split("|")
-                                if (len(rule_fields) == 5):
-                                    rule_package = rule_fields[0]
-                                    rule_version = rule_fields[1]
-                                    rule_level = rule_fields[2]
-                                    rule_extraInfo = rule_fields[3]
-                                    rule_warning = rule_fields[4]
-                                    if (rule_package == package):
-                                        foundPackageRule = True
-                                        if (rule_version == newVersion):
-                                            level = rule_level
-                                            extraInfo = rule_extraInfo
-                                            warning = rule_warning
-                                            goOn = False # We found a rule with the exact package name and version, no need to look elsewhere
-                                        else:
-                                            if (rule_version == "*"):
-                                                level = rule_level
-                                                extraInfo = rule_extraInfo
-                                                warning = rule_warning
-                                    else:
-                                        if (rule_package.startswith("*")):
-                                            keyword = rule_package.replace("*", "")
-                                            index = package.find(keyword)
-                                            if (index > -1 and foundPackageRule == False):
-                                                level = rule_level
-                                                extraInfo = rule_extraInfo
-                                                warning = rule_warning
-                        rulesFile.close()
-
-                        level = int(level)
-                        if (prefs["level" + str(level) + "_visible"]):                            
-                            if (new_mintupdate):
-                                if (package == "mintupdate"):
-                                    list_of_packages = list_of_packages + " " + package
-                                    iter = model.insert_before(None, None)
-                                    model.set_value(iter, 0, "true")
-                                    model.row_changed(model.get_path(iter), iter)
-                                    model.set_value(iter, 1, package)
-                                    model.set_value(iter, 2, gtk.gdk.pixbuf_new_from_file("/usr/lib/linuxmint/mintUpdate/icons/level" + str(level) + ".png"))
-                                    model.set_value(iter, 3, oldVersion)
-                                    model.set_value(iter, 4, newVersion)
-                                    model.set_value(iter, 5, warning)
-                                    model.set_value(iter, 6, extraInfo)
-                                    model.set_value(iter, 7, str(level))
-                                    model.set_value(iter, 8, description)
-                                    model.set_value(iter, 9, size)
-                                    model.set_value(iter, 10, strSize)
-                                    model.set_value(iter, 11, source_package)                            
-                                    num_visible = num_visible + 1
-                                                                                                   
-                                #else:
-                                #    model.set_value(iter, 0, "false")                                    
-                            else:
+                        if (new_mintupdate):
+                            if (package == "mintupdate"):
                                 list_of_packages = list_of_packages + " " + package
                                 iter = model.insert_before(None, None)
-                                if (prefs["level" + str(level) + "_safe"]):
-                                    model.set_value(iter, 0, "true")                            
-                                    num_safe = num_safe + 1
-                                    download_size = download_size + size
-                                else:
-                                    model.set_value(iter, 0, "false") 
-                                                                                  
+                                model.set_value(iter, INDEX_UPGRADE, "true")
                                 model.row_changed(model.get_path(iter), iter)
-                                model.set_value(iter, 1, package)
-                                model.set_value(iter, 2, gtk.gdk.pixbuf_new_from_file("/usr/lib/linuxmint/mintUpdate/icons/level" + str(level) + ".png"))
-                                model.set_value(iter, 3, oldVersion)
-                                model.set_value(iter, 4, newVersion)
-                                model.set_value(iter, 5, warning)
-                                model.set_value(iter, 6, extraInfo)
-                                model.set_value(iter, 7, str(level))
-                                model.set_value(iter, 8, description)
-                                model.set_value(iter, 9, size)
-                                model.set_value(iter, 10, strSize)
-                                model.set_value(iter, 11, source_package)                            
-                                num_visible = num_visible + 1
+                                model.set_value(iter, INDEX_PACKAGE_NAME, package)
+                                model.set_value(iter, INDEX_OLD_VERSION, oldVersion)
+                                model.set_value(iter, INDEX_NEW_VERSION, newVersion)                                
+                                model.set_value(iter, INDEX_SIZE, size)
+                                model.set_value(iter, INDEX_STR_SIZE, strSize)
+                                model.set_value(iter, INDEX_DESCRIPTION, description)
+                                model.set_value(iter, INDEX_SOURCE_PACKAGE, source_package)
+                                num_updates = num_updates + 1
+                        else:
+                            list_of_packages = list_of_packages + " " + package
+                            iter = model.insert_before(None, None)
+                            model.set_value(iter, INDEX_UPGRADE, "true")                            
+                            download_size = download_size + size
+                            model.row_changed(model.get_path(iter), iter)
+                            model.set_value(iter, INDEX_PACKAGE_NAME, package)
+                            model.set_value(iter, INDEX_OLD_VERSION, oldVersion)
+                            model.set_value(iter, INDEX_NEW_VERSION, newVersion)                            
+                            model.set_value(iter, INDEX_SIZE, size)
+                            model.set_value(iter, INDEX_STR_SIZE, strSize)
+                            model.set_value(iter, INDEX_DESCRIPTION, description)
+                            model.set_value(iter, INDEX_SOURCE_PACKAGE, source_package)
+                            num_updates = num_updates + 1
 
-                gtk.gdk.threads_enter()  
+                gtk.gdk.threads_enter()
                 if (new_mintupdate):
                     self.statusString = _("A new version of the update manager is available")
                     self.statusIcon.set_from_file(icon_updates)
@@ -627,8 +584,8 @@ class RefreshThread(threading.Thread):
                     log.writelines("++ Found a new version of mintupdate\n")
                     log.flush()
                 else:
-                    if (num_safe > 0):
-                        if (num_safe == 1):
+                    if (num_updates > 0):
+                        if (num_updates == 1):
                             if (num_ignored == 0):
                                 self.statusString = _("1 recommended update available (%(size)s)") % {'size':size_to_string(download_size)}
                             elif (num_ignored == 1):
@@ -637,15 +594,15 @@ class RefreshThread(threading.Thread):
                                 self.statusString = _("1 recommended update available (%(size)s), %(ignored)d ignored") % {'size':size_to_string(download_size), 'ignored':num_ignored}
                         else:
                             if (num_ignored == 0):
-                                self.statusString = _("%(recommended)d recommended updates available (%(size)s)") % {'recommended':num_safe, 'size':size_to_string(download_size)}
+                                self.statusString = _("%(recommended)d recommended updates available (%(size)s)") % {'recommended':num_updates, 'size':size_to_string(download_size)}
                             elif (num_ignored == 1):
-                                self.statusString = _("%(recommended)d recommended updates available (%(size)s), 1 ignored") % {'recommended':num_safe, 'size':size_to_string(download_size)}                            
+                                self.statusString = _("%(recommended)d recommended updates available (%(size)s), 1 ignored") % {'recommended':num_updates, 'size':size_to_string(download_size)}
                             elif (num_ignored > 0):
-                                self.statusString = _("%(recommended)d recommended updates available (%(size)s), %(ignored)d ignored") % {'recommended':num_safe, 'size':size_to_string(download_size), 'ignored':num_ignored}
+                                self.statusString = _("%(recommended)d recommended updates available (%(size)s), %(ignored)d ignored") % {'recommended':num_updates, 'size':size_to_string(download_size), 'ignored':num_ignored}
                         self.statusIcon.set_from_file(icon_updates)
                         self.statusIcon.set_tooltip(self.statusString)
                         statusbar.push(context_id, self.statusString)
-                        log.writelines("++ Found " + str(num_safe) + " recommended software updates\n")
+                        log.writelines("++ Found " + str(num_updates) + " recommended software updates\n")
                         log.flush()
                     else:
                         self.statusIcon.set_from_file(icon_up2date)
@@ -709,7 +666,7 @@ def clear(widget, treeView, statusbar, context_id):
     model = treeView.get_model()
     iter = model.get_iter_first()
     while (iter != None):
-        model.set_value(iter, 0, "false")
+        model.set_value(iter, INDEX_UPGRADE, "false")
         iter = model.iter_next(iter)
     statusbar.push(context_id, _("No updates selected"))
 
@@ -717,17 +674,17 @@ def select_all(widget, treeView, statusbar, context_id):
     model = treeView.get_model()
     iter = model.get_iter_first()
     while (iter != None):
-        model.set_value(iter, 0, "true")
+        model.set_value(iter, INDEX_UPGRADE, "true")
         iter = model.iter_next(iter)
     iter = model.get_iter_first()
     download_size = 0
     num_selected = 0
     while (iter != None):
-        checked = model.get_value(iter, 0)
-        if (checked == "true"):            
-            size = model.get_value(iter, 9)
+        checked = model.get_value(iter, INDEX_UPGRADE)
+        if (checked == "true"):
+            size = model.get_value(iter, INDEX_SIZE)
             download_size = download_size + size
-            num_selected = num_selected + 1                                
+            num_selected = num_selected + 1
         iter = model.iter_next(iter)
     if num_selected == 0:
         statusbar.push(context_id, _("No updates selected"))
@@ -737,8 +694,41 @@ def select_all(widget, treeView, statusbar, context_id):
         statusbar.push(context_id, _("%(selected)d updates selected (%(size)s)") % {'selected':num_selected, 'size':size_to_string(download_size)})
 
 def install(widget, treeView, statusIcon, wTree):
+    #Launch the install
     install = InstallThread(treeView, statusIcon, wTree)
     install.start()
+    #Try to update the local update pack level
+    try:
+        import apt_pkg
+        apt_pkg.init_config()
+        apt_pkg.init_system()
+        acquire = apt_pkg.Acquire()
+        slist = apt_pkg.SourceList()    
+        slist.read_main_list()    
+        slist.get_indexes(acquire, True)   
+        lm_debian_repo_url = None 
+        for item in acquire.items:
+            repo = item.desc_uri
+            if "Packages.bz2" in repo:            
+                if "debian.linuxmint.com/latest/dists" in repo:
+                    lm_debian_repo_url = "http://debian.linuxmint.com/latest"
+                    break
+                if "debian.linuxmint.com/incoming/dists" in repo:
+                    lm_debian_repo_url = "http://debian.linuxmint.com/incoming"
+                    break                            
+        if lm_debian_repo_url is not None:
+            url = "%s/update-pack-info.txt" % lm_debian_repo_url
+            import urllib2
+            html = urllib2.urlopen(url)
+            for line in html.readlines():
+                elements = line.split("=")
+                variable = elements[0].strip()
+                value = elements[1].strip()
+                if variable == "version":                
+                    os.system("echo %s > /var/log/mintupdate.packlevel" % value)
+            html.close()
+    except Exception, detail:
+        print detail
 
 def change_icon(widget, button, prefs_tree, treeview, statusIcon, wTree):
     global icon_busy
@@ -795,19 +785,6 @@ def pref_apply(widget, prefs_tree, treeview, statusIcon, wTree):
 
     config = ConfigObj("/etc/linuxmint/mintUpdate.conf")
 
-    #Write level config
-    config['levels'] = {}
-    config['levels']['level1_visible'] = prefs_tree.get_widget("visible1").get_active()
-    config['levels']['level2_visible'] = prefs_tree.get_widget("visible2").get_active()
-    config['levels']['level3_visible'] = prefs_tree.get_widget("visible3").get_active()
-    config['levels']['level4_visible'] = prefs_tree.get_widget("visible4").get_active()
-    config['levels']['level5_visible'] = prefs_tree.get_widget("visible5").get_active()
-    config['levels']['level1_safe'] = prefs_tree.get_widget("safe1").get_active()
-    config['levels']['level2_safe'] = prefs_tree.get_widget("safe2").get_active()
-    config['levels']['level3_safe'] = prefs_tree.get_widget("safe3").get_active()
-    config['levels']['level4_safe'] = prefs_tree.get_widget("safe4").get_active()
-    config['levels']['level5_safe'] = prefs_tree.get_widget("safe5").get_active()
-
     #Write refresh config
     config['refresh'] = {}
     config['refresh']['timer_minutes'] = int(prefs_tree.get_widget("timer_minutes").get_value())
@@ -828,7 +805,7 @@ def pref_apply(widget, prefs_tree, treeview, statusIcon, wTree):
     config['icons']['error'] = icon_error
     config['icons']['unknown'] = icon_unknown
     config['icons']['apply'] = icon_apply
-    
+
     #Write blacklisted packages
     ignored_list = open("/etc/linuxmint/mintupdate.ignored", "w")
     treeview_blacklist = prefs_tree.get_widget("treeview_blacklist")
@@ -854,7 +831,7 @@ def history_cancel(widget, tree):
 
 def history_clear(widget, tree):
     os.system("rm -rf /var/log/mintUpdate.history")
-    model = gtk.TreeStore(str, str, str, gtk.gdk.Pixbuf, str, str)
+    model = gtk.TreeStore(str, str, str, str)
     tree.set_model(model)
     del model
 
@@ -908,35 +885,7 @@ def read_configuration():
         icon_unknown = "/usr/lib/linuxmint/mintUpdate/icons/base.svg"
         icon_apply = "/usr/lib/linuxmint/mintUpdate/icons/base-exec.svg"
 
-    #Read levels config
-    try:
-        prefs["level1_visible"] = (config['levels']['level1_visible'] == "True")
-        prefs["level2_visible"] = (config['levels']['level2_visible'] == "True")
-        prefs["level3_visible"] = (config['levels']['level3_visible'] == "True")
-        prefs["level4_visible"] = (config['levels']['level4_visible'] == "True")
-        prefs["level5_visible"] = (config['levels']['level5_visible'] == "True")
-        prefs["level1_safe"] = (config['levels']['level1_safe'] == "True")
-        prefs["level2_safe"] = (config['levels']['level2_safe'] == "True")
-        prefs["level3_safe"] = (config['levels']['level3_safe'] == "True")
-        prefs["level4_safe"] = (config['levels']['level4_safe'] == "True")
-        prefs["level5_safe"] = (config['levels']['level5_safe'] == "True")
-    except:
-        prefs["level1_visible"] = True
-        prefs["level2_visible"] = True
-        prefs["level3_visible"] = True
-        prefs["level4_visible"] = False
-        prefs["level5_visible"] = False
-        prefs["level1_safe"] = True
-        prefs["level2_safe"] = True
-        prefs["level3_safe"] = True
-        prefs["level4_safe"] = False
-        prefs["level5_safe"] = False    
-
     #Read columns config
-    try:
-        prefs["level_column_visible"] = (config['visible_columns']['level'] == "True")
-    except:
-        prefs["level_column_visible"] = True
     try:
         prefs["package_column_visible"] = (config['visible_columns']['package'] == "True")
     except:
@@ -990,28 +939,11 @@ def open_preferences(widget, treeview, statusIcon, wTree):
     prefs_tree = gtk.glade.XML(gladefile, "window2")
     prefs_tree.get_widget("window2").set_title(_("Preferences") + " - " + _("Update Manager"))
 
-    prefs_tree.get_widget("label37").set_text(_("Levels"))
     prefs_tree.get_widget("label36").set_text(_("Auto-Refresh"))
-    prefs_tree.get_widget("label39").set_markup("<b>" + _("Level") + "</b>")
-    prefs_tree.get_widget("label40").set_markup("<b>" + _("Description") + "</b>")
-    prefs_tree.get_widget("label48").set_markup("<b>" + _("Tested?") + "</b>")
-    prefs_tree.get_widget("label54").set_markup("<b>" + _("Origin") + "</b>")
-    prefs_tree.get_widget("label41").set_markup("<b>" + _("Safe?") + "</b>")
-    prefs_tree.get_widget("label42").set_markup("<b>" + _("Visible?") + "</b>")
-    prefs_tree.get_widget("label43").set_text(_("Certified packages. Tested through Romeo or directly maintained by Linux Mint."))
-    prefs_tree.get_widget("label44").set_text(_("Recommended packages. Tested and approved by Linux Mint."))
-    prefs_tree.get_widget("label45").set_text(_("Safe packages. Not tested but believed to be safe."))
-    prefs_tree.get_widget("label46").set_text(_("Unsafe packages. Could potentially affect the stability of the system."))
-    prefs_tree.get_widget("label47").set_text(_("Dangerous packages. Known to affect the stability of the systems depending on certain specs or hardware."))
-    prefs_tree.get_widget("label55").set_text(_("Linux Mint"))
-    prefs_tree.get_widget("label56").set_text(_("Upstream"))
-    prefs_tree.get_widget("label57").set_text(_("Upstream"))
-    prefs_tree.get_widget("label58").set_text(_("Upstream"))
-    prefs_tree.get_widget("label59").set_text(_("Upstream"))
     prefs_tree.get_widget("label81").set_text(_("Refresh the list of updates every:"))
     prefs_tree.get_widget("label82").set_text("<i>" + _("Note: The list only gets refreshed while the update manager window is closed (system tray mode).") + "</i>")
     prefs_tree.get_widget("label82").set_use_markup(True)
-    prefs_tree.get_widget("label83").set_text(_("Update Method"))        
+    prefs_tree.get_widget("label83").set_text(_("Update Method"))
     prefs_tree.get_widget("label85").set_text(_("Icons"))
     prefs_tree.get_widget("label86").set_markup("<b>" + _("Icon") + "</b>")
     prefs_tree.get_widget("label87").set_markup("<b>" + _("Status") + "</b>")
@@ -1041,17 +973,6 @@ def open_preferences(widget, treeview, statusIcon, wTree):
     prefs_tree.get_widget("button_icon_apply").connect("clicked", change_icon, "apply", prefs_tree, treeview, statusIcon, wTree)
 
     prefs = read_configuration()
-
-    prefs_tree.get_widget("visible1").set_active(prefs["level1_visible"])
-    prefs_tree.get_widget("visible2").set_active(prefs["level2_visible"])
-    prefs_tree.get_widget("visible3").set_active(prefs["level3_visible"])
-    prefs_tree.get_widget("visible4").set_active(prefs["level4_visible"])
-    prefs_tree.get_widget("visible5").set_active(prefs["level5_visible"])
-    prefs_tree.get_widget("safe1").set_active(prefs["level1_safe"])
-    prefs_tree.get_widget("safe2").set_active(prefs["level2_safe"])
-    prefs_tree.get_widget("safe3").set_active(prefs["level3_safe"])
-    prefs_tree.get_widget("safe4").set_active(prefs["level4_safe"])
-    prefs_tree.get_widget("safe5").set_active(prefs["level5_safe"])
 
     prefs_tree.get_widget("timer_minutes_label").set_text(_("minutes"))
     prefs_tree.get_widget("timer_hours_label").set_text(_("hours"))
@@ -1089,12 +1010,12 @@ def open_preferences(widget, treeview, statusIcon, wTree):
 
     if os.path.exists("/etc/linuxmint/mintupdate.ignored"):
         ignored_list = open("/etc/linuxmint/mintupdate.ignored", "r")
-        for ignored_pkg in ignored_list:            
+        for ignored_pkg in ignored_list:
             iter = model.insert_before(None, None)
             model.set_value(iter, 0, ignored_pkg.strip())
         del model
         ignored_list.close()
-    
+
     prefs_tree.get_widget("toolbutton_add").connect("clicked", add_blacklisted_package, treeview_blacklist)
     prefs_tree.get_widget("toolbutton_remove").connect("clicked", remove_blacklisted_package, treeview_blacklist)
 
@@ -1137,61 +1058,161 @@ def open_history(widget):
     wTree.get_widget("window4").set_title(_("History of updates") + " - " + _("Update Manager"))
 
     # the treeview
-    column1 = gtk.TreeViewColumn(_("Date"), gtk.CellRendererText(), text=1)
-    column1.set_sort_column_id(1)
-    column1.set_resizable(True)
-    column2 = gtk.TreeViewColumn(_("Package"), gtk.CellRendererText(), text=2)
-    column2.set_sort_column_id(2)
-    column2.set_resizable(True)
-    column3 = gtk.TreeViewColumn(_("Level"), gtk.CellRendererPixbuf(), pixbuf=3)
-    column3.set_sort_column_id(6)
-    column3.set_resizable(True)
-    column4 = gtk.TreeViewColumn(_("Old version"), gtk.CellRendererText(), text=4)
-    column4.set_sort_column_id(4)
-    column4.set_resizable(True)
-    column5 = gtk.TreeViewColumn(_("New version"), gtk.CellRendererText(), text=5)
-    column5.set_sort_column_id(5)
-    column5.set_resizable(True)
+    column_date = gtk.TreeViewColumn(_("Date"), gtk.CellRendererText(), text=INDEX_HISTORY_DATE)
+    column_date.set_sort_column_id(INDEX_HISTORY_DATE)
+    column_date.set_resizable(True)
+    column_package_name = gtk.TreeViewColumn(_("Package"), gtk.CellRendererText(), text=INDEX_HISTORY_PACKAGE_NAME)
+    column_package_name.set_sort_column_id(INDEX_HISTORY_PACKAGE_NAME)
+    column_package_name.set_resizable(True)
+    column_old_version = gtk.TreeViewColumn(_("Old version"), gtk.CellRendererText(), text=INDEX_HISTORY_OLD_VERSION)
+    column_old_version.set_sort_column_id(INDEX_HISTORY_OLD_VERSION)
+    column_old_version.set_resizable(True)
+    column_new_version = gtk.TreeViewColumn(_("New version"), gtk.CellRendererText(), text=INDEX_HISTORY_NEW_VERSION)
+    column_new_version.set_sort_column_id(INDEX_HISTORY_NEW_VERSION)
+    column_new_version.set_resizable(True)
 
-    treeview_update.append_column(column1)
-    treeview_update.append_column(column3)
-    treeview_update.append_column(column2)
-    treeview_update.append_column(column5)
-    treeview_update.append_column(column4)
+    treeview_update.append_column(column_date)
+    treeview_update.append_column(column_package_name)
+    treeview_update.append_column(column_old_version)
+    treeview_update.append_column(column_new_version)
 
     treeview_update.set_headers_clickable(True)
     treeview_update.set_reorderable(False)
-    treeview_update.set_search_column(2)
+    treeview_update.set_search_column(INDEX_HISTORY_PACKAGE_NAME)
     treeview_update.set_enable_search(True)
     treeview_update.show()
 
-    model = gtk.TreeStore(str, str, str, gtk.gdk.Pixbuf, str, str, str) # (date, packageName, level, oldVersion, newVersion, stringLevel)
+    model = gtk.TreeStore(str, str, str, str) # (date, packageName, oldVersion, newVersion)
     if (os.path.exists("/var/log/mintUpdate.history")):
         updates = commands.getoutput("cat /var/log/mintUpdate.history")
         updates = string.split(updates, "\n")
         for pkg in updates:
             values = string.split(pkg, "\t")
-            if len(values) == 5:
+            if len(values) == 4:
                 date = values[0]
                 package = values[1]
-                level = values[2]
-                oldVersion = values[3]
-                newVersion = values[4]
+                oldVersion = values[2]
+                newVersion = values[3]
 
                 iter = model.insert_before(None, None)
-                model.set_value(iter, 0, package)
-                model.row_changed(model.get_path(iter), iter)
-                model.set_value(iter, 1, date)
-                model.set_value(iter, 2, package)
-                model.set_value(iter, 3, gtk.gdk.pixbuf_new_from_file("/usr/lib/linuxmint/mintUpdate/icons/level" + str(level) + ".png"))
-                model.set_value(iter, 4, oldVersion)
-                model.set_value(iter, 5, newVersion)
-                model.set_value(iter, 6, level)
+                model.set_value(iter, INDEX_HISTORY_DATE, date)
+                model.row_changed(model.get_path(iter), iter)                
+                model.set_value(iter, INDEX_HISTORY_PACKAGE_NAME, package)
+                model.set_value(iter, INDEX_HISTORY_OLD_VERSION, oldVersion)
+                model.set_value(iter, INDEX_HISTORY_NEW_VERSION, newVersion)
 
     treeview_update.set_model(model)
     del model
     wTree.get_widget("button_close").connect("clicked", history_cancel, wTree)
     wTree.get_widget("button_clear").connect("clicked", history_clear, treeview_update)
+    
+def open_pack_info(widget):
+    #Set the Glade file
+    gladefile = "/usr/lib/linuxmint/mintUpdate/mintUpdate.glade"
+    wTree = gtk.glade.XML(gladefile, "window_pack_info")    
+    wTree.get_widget("window_pack_info").set_icon_from_file("/usr/lib/linuxmint/mintUpdate/icons/base.svg")
+    wTree.get_widget("window_pack_info").set_title(_("Update Pack Info") + " - " + _("Update Manager"))
+    
+    #i18n
+    wTree.get_widget("label_system_configuration").set_text(_("Your system configuration:"))
+    wTree.get_widget("label_update_pack_available").set_text(_("Current Update Pack available:"))
+    wTree.get_widget("label_update_pack_installed").set_text(_("Latest Update Pack used by this system:"))
+    
+    # Check APT configuration
+    config_str = "<span color='red'><b>" + _("Could not identify your APT sources") + "</b></span>"
+    latest_update_pack = _("N/A")
+    installed_update_pack = _("N/A")
+    lm_debian_repo_url = None    
+    
+    try:
+        if (os.path.exists("/var/log/mintupdate.packlevel")):
+            installed_update_pack = commands.getoutput("cat /var/log/mintupdate.packlevel")            
+        
+        import apt_pkg
+        apt_pkg.init_config()
+        apt_pkg.init_system()
+        acquire = apt_pkg.Acquire()
+        slist = apt_pkg.SourceList()    
+        slist.read_main_list()    
+        slist.get_indexes(acquire, True)    
+        points_to_debian = False
+        points_to_lm_debian_latest = False
+        points_to_lm_debian_incoming = False
+        points_to_lm_debian = False
+        points_to_lm = False
+        for item in acquire.items:
+            repo = item.desc_uri
+            if "Packages.bz2" in repo:
+                if "packages.linuxmint.com/dists/debian" in repo:
+                    points_to_lm = True
+                if "debian.linuxmint.com/latest/dists" in repo:
+                    points_to_lm_debian_latest = True
+                    points_to_lm_debian = True
+                    lm_debian_repo_url = "http://debian.linuxmint.com/latest"
+                if "debian.linuxmint.com/incoming/dists" in repo:
+                    points_to_lm_debian_incoming = True
+                    points_to_lm_debian = True
+                    lm_debian_repo_url = "http://debian.linuxmint.com/incoming"
+                if "debian.org/debian/dists" in repo and "//ftp." in repo:
+                    points_to_debian = True
+        if points_to_debian and points_to_lm_debian:
+            #Conflict between DEBIAN and LM_DEBIAN
+            config_str = _("Your system is pointing to ftp.debian.org and debian.linuxmint.com") + "\n" + _("These repositories conflict with each others")
+            wTree.get_widget("image_system_config").set_from_stock(gtk.STOCK_DIALOG_ERROR, gtk.ICON_SIZE_SMALL_TOOLBAR)
+        elif points_to_lm_debian_incoming and points_to_lm_debian_latest:
+            #Conflict between LM_DEBIAN_INCOMING and LM_DEBIAN_LATEST
+            config_str = _("Your system is pointing to debian.linuxmint.com/latest and debian.linuxmint.com/incoming") + "\n" + _("These repositories conflict with each others")
+            wTree.get_widget("image_system_config").set_from_stock(gtk.STOCK_DIALOG_ERROR, gtk.ICON_SIZE_SMALL_TOOLBAR)
+        elif not points_to_lm:
+            #Missing LM
+            config_str = _("Your system is not pointing to the Linux Mint repositories") + "\n" + _("Add 'deb http://packages.linuxmint.com/ debian main upstream import' to your APT sources")
+            wTree.get_widget("image_system_config").set_from_stock(gtk.STOCK_DIALOG_ERROR, gtk.ICON_SIZE_SMALL_TOOLBAR)
+        elif not (points_to_lm_debian or points_to_debian):
+            #Missing DEBIAN or LM_DEBIAN
+            config_str = _("Your system is not pointing to any Debian repository") + "\n" + _("Add 'deb http://debian.linuxmint.com/latest testing main contrib non-free' to your APT sources")
+            wTree.get_widget("image_system_config").set_from_stock(gtk.STOCK_DIALOG_ERROR, gtk.ICON_SIZE_SMALL_TOOLBAR)
+        else:
+            if points_to_debian:
+                config_str = _("Your system is pointing directly to Debian") + "\n" + _("This is only recommended for experienced users")
+                wTree.get_widget("image_system_config").set_from_stock(gtk.STOCK_DIALOG_WARNING, gtk.ICON_SIZE_SMALL_TOOLBAR)
+            elif points_to_lm_debian_incoming:
+                config_str = _("Your system is pointing to the 'Linux Mint Debian Incoming' repository") + "\n" + _("This is only recommend for experienced users")
+                wTree.get_widget("image_system_config").set_from_stock(gtk.STOCK_DIALOG_WARNING, gtk.ICON_SIZE_SMALL_TOOLBAR)                
+            elif points_to_lm_debian_latest:
+                config_str = _("Your system is pointing to the 'Linux Mint Debian Latest' repository")
+                wTree.get_widget("image_system_config").set_from_stock(gtk.STOCK_DIALOG_INFO, gtk.ICON_SIZE_SMALL_TOOLBAR)
+    except Exception, detail:
+        print detail
+    
+    if lm_debian_repo_url is not None:
+        url = "%s/update-pack-info.txt" % lm_debian_repo_url
+        import urllib2
+        html = urllib2.urlopen(url)
+        for line in html.readlines():
+            elements = line.split("=")
+            variable = elements[0].strip()
+            value = elements[1].strip()
+            if variable == "version":
+                latest_update_pack = value
+        html.close()            
+        
+        import webkit
+        browser = webkit.WebView()
+        wTree.get_widget("scrolled_pack_info").add(browser)
+        browser.connect("button-press-event", lambda w, e: e.button == 3)
+        url = "%s/update-pack.html" % lm_debian_repo_url
+        browser.open(url)
+        browser.show()
+                
+    wTree.get_widget("label_system_configuration_value").set_markup("<b>%s</b>" % config_str)
+    wTree.get_widget("label_update_pack_available_value").set_markup("<b>%s</b>" % latest_update_pack)
+    wTree.get_widget("label_update_pack_installed_value").set_markup("<b>%s</b>" % installed_update_pack)
+
+    wTree.get_widget("button_close").connect("clicked", close_pack_info, wTree)    
+    wTree.get_widget("window_pack_info").show()
+            
+def close_pack_info(widget, tree):
+    tree.get_widget("window_pack_info").hide()
 
 def open_information(widget):
     global logFile
@@ -1230,12 +1251,7 @@ def open_about(widget):
         h.close()
         dlg.set_license(gpl)
     except Exception, detail:
-        print detail
-    try:
-        version = commands.getoutput("/usr/lib/linuxmint/common/version.py mintupdate")
-        dlg.set_version(version)
-    except Exception, detail:
-        print detail
+        print detail    
 
     dlg.set_authors(["Clement Lefebvre <root@linuxmint.com>", "Chris Hodapp <clhodapp@live.com>"])
     dlg.set_icon_from_file("/usr/lib/linuxmint/mintUpdate/icons/base.svg")
@@ -1257,8 +1273,8 @@ def quit_cb(widget, window, vpaned, data = None):
         save_window_size(window, vpaned)
     except:
         pass # cause log might already been closed
-    # Whatever works best heh :) 
-    pid = os.getpid()    
+    # Whatever works best heh :)
+    pid = os.getpid()
     os.system("kill -9 %s &" % pid)
     #gtk.main_quit()
     #sys.exit(0)
@@ -1322,13 +1338,13 @@ def save_window_size(window, vpaned):
     config['dimensions']['pane_position'] = vpaned.get_position()
     config.write()
 
-def display_selected_package(selection, wTree):    
+def display_selected_package(selection, wTree):
     wTree.get_widget("textview_description").get_buffer().set_text("")
-    wTree.get_widget("textview_changes").get_buffer().set_text("")            
+    wTree.get_widget("textview_changes").get_buffer().set_text("")
     (model, iter) = selection.get_selected()
     if (iter != None):
-        selected_package = model.get_value(iter, 1)
-        description_txt = model.get_value(iter, 8)                
+        selected_package = model.get_value(iter, INDEX_PACKAGE_NAME)
+        description_txt = model.get_value(iter, INDEX_DESCRIPTION)
         wTree.get_widget("notebook_details").set_current_page(0)
         wTree.get_widget("textview_description").get_buffer().set_text(description_txt)
 
@@ -1336,21 +1352,20 @@ def switch_page(notebook, page, page_num, Wtree, treeView):
     selection = treeView.get_selection()
     (model, iter) = selection.get_selected()
     if (iter != None):
-        selected_package = model.get_value(iter, 1)
-        description_txt = model.get_value(iter, 8)   
+        selected_package = model.get_value(iter, INDEX_PACKAGE_NAME)
+        description_txt = model.get_value(iter, INDEX_DESCRIPTION)
         if (page_num == 0):
             # Description tab
             wTree.get_widget("textview_description").get_buffer().set_text(description_txt)
         if (page_num == 1):
-            # Changelog tab            
-            level = model.get_value(iter, 7)
-            version = model.get_value(iter, 4)
-            retriever = ChangelogRetriever(selected_package, level, version, wTree)
+            # Changelog tab
+            version = model.get_value(iter, INDEX_NEW_VERSION)
+            retriever = ChangelogRetriever(selected_package, version, wTree)
             retriever.start()
 
 def celldatafunction_checkbox(column, cell, model, iter):
     cell.set_property("activatable", True)
-    checked = model.get_value(iter, 0)
+    checked = model.get_value(iter, INDEX_UPGRADE)
     if (checked == "true"):
         cell.set_property("active", True)
     else:
@@ -1360,21 +1375,21 @@ def toggled(renderer, path, treeview, statusbar, context_id):
     model = treeview.get_model()
     iter = model.get_iter(path)
     if (iter != None):
-        checked = model.get_value(iter, 0)
+        checked = model.get_value(iter, INDEX_UPGRADE)
         if (checked == "true"):
-            model.set_value(iter, 0, "false")
+            model.set_value(iter, INDEX_UPGRADE, "false")
         else:
-            model.set_value(iter, 0, "true")
-    
+            model.set_value(iter, INDEX_UPGRADE, "true")
+
     iter = model.get_iter_first()
     download_size = 0
     num_selected = 0
     while (iter != None):
-        checked = model.get_value(iter, 0)
-        if (checked == "true"):            
-            size = model.get_value(iter, 9)
+        checked = model.get_value(iter, INDEX_UPGRADE)
+        if (checked == "true"):
+            size = model.get_value(iter, INDEX_SIZE)
             download_size = download_size + size
-            num_selected = num_selected + 1                                
+            num_selected = num_selected + 1
         iter = model.iter_next(iter)
     if num_selected == 0:
         statusbar.push(context_id, _("No updates selected"))
@@ -1382,7 +1397,7 @@ def toggled(renderer, path, treeview, statusbar, context_id):
         statusbar.push(context_id, _("%(selected)d update selected (%(size)s)") % {'selected':num_selected, 'size':size_to_string(download_size)})
     else:
         statusbar.push(context_id, _("%(selected)d updates selected (%(size)s)") % {'selected':num_selected, 'size':size_to_string(download_size)})
-    
+
 def size_to_string(size):
     strSize = str(size) + _("B")
     if (size >= 1024):
@@ -1402,19 +1417,19 @@ def setVisibleColumn(checkmenuitem, column, configName):
         config['visible_columns'][configName] = checkmenuitem.get_active()
     config.write()
     column.set_visible(checkmenuitem.get_active())
-    
+
 def menuPopup(widget, event, treeview_update, statusIcon, wTree):
     if event.button == 3:
         (model, iter) = widget.get_selection().get_selected()
         if (iter != None):
-            selected_package = model.get_value(iter, 1)
-            menu = gtk.Menu()                
+            selected_package = model.get_value(iter, INDEX_PACKAGE_NAME)
+            menu = gtk.Menu()
             menuItem = gtk.MenuItem(_("Ignore updates for this package"))
             menuItem.connect("activate", add_to_ignore_list, treeview_update, selected_package, statusIcon, wTree)
-            menu.append(menuItem)        
-            menu.show_all()        
+            menu.append(menuItem)
+            menu.show_all()
             menu.popup( None, None, None, 3, 0)
-        
+
 def add_to_ignore_list(widget, treeview_update, pkg, statusIcon, wTree):
     os.system("echo \"%s\" >> /etc/linuxmint/mintupdate.ignored" % pkg)
     force_refresh(widget, treeview_update, statusIcon, wTree)
@@ -1446,7 +1461,7 @@ logdir = "/tmp/mintUpdate/"
 if not os.path.exists(logdir):
     os.system("mkdir -p " + logdir)
     os.system("chmod a+rwx " + logdir)
-    
+
 if os.getuid() == 0 :
     os.system("chmod a+rwx " + logdir)
     mode = "root"
@@ -1478,7 +1493,7 @@ try:
     statusIcon = gtk.StatusIcon()
     statusIcon.set_from_file(icon_busy)
     statusIcon.set_tooltip(_("Checking for updates"))
-    statusIcon.set_visible(True)    
+    statusIcon.set_visible(True)
 
     #Set the Glade file
     gladefile = "/usr/lib/linuxmint/mintUpdate/mintUpdate.glade"
@@ -1486,7 +1501,7 @@ try:
     wTree.get_widget("window1").set_title(_("Update Manager"))
     wTree.get_widget("window1").set_default_size(prefs['dimensions_x'], prefs['dimensions_y'])
     wTree.get_widget("vpaned1").set_position(prefs['dimensions_pane_position'])
-    
+
     statusbar = wTree.get_widget("statusbar")
     context_id = statusbar.get_context_id("mintUpdate")
 
@@ -1495,7 +1510,7 @@ try:
     wTree.get_widget("window1").set_icon_from_file("/usr/lib/linuxmint/mintUpdate/icons/base.svg")
 
     # Get the window socket (needed for synaptic later on)
-    
+
     if os.getuid() != 0 :
         # If we're not in root mode do that (don't know why it's needed.. very weird)
         socket = gtk.Socket()
@@ -1506,45 +1521,40 @@ try:
     # the treeview
     cr = gtk.CellRendererToggle()
     cr.connect("toggled", toggled, treeview_update, statusbar, context_id)
-    column1 = gtk.TreeViewColumn(_("Upgrade"), cr)
-    column1.set_cell_data_func(cr, celldatafunction_checkbox)
-    column1.set_sort_column_id(5)
-    column1.set_resizable(True)
+    column_upgrade = gtk.TreeViewColumn(_("Upgrade"), cr)
+    column_upgrade.set_cell_data_func(cr, celldatafunction_checkbox)
+    column_upgrade.set_sort_column_id(INDEX_UPGRADE)
+    column_upgrade.set_resizable(True)
 
-    column2 = gtk.TreeViewColumn(_("Package"), gtk.CellRendererText(), text=1)
-    column2.set_sort_column_id(1)
-    column2.set_resizable(True)
+    column_package = gtk.TreeViewColumn(_("Package"), gtk.CellRendererText(), text=INDEX_PACKAGE_NAME)
+    column_package.set_sort_column_id(INDEX_PACKAGE_NAME)
+    column_package.set_resizable(True)
 
-    column3 = gtk.TreeViewColumn(_("Level"), gtk.CellRendererPixbuf(), pixbuf=2)
-    column3.set_sort_column_id(7)
-    column3.set_resizable(True)
+    column_old_version = gtk.TreeViewColumn(_("Old version"), gtk.CellRendererText(), text=INDEX_OLD_VERSION)
+    column_old_version.set_sort_column_id(INDEX_OLD_VERSION)
+    column_old_version.set_resizable(True)
 
-    column4 = gtk.TreeViewColumn(_("Old version"), gtk.CellRendererText(), text=3)
-    column4.set_sort_column_id(3)
-    column4.set_resizable(True)
+    column_new_version = gtk.TreeViewColumn(_("New version"), gtk.CellRendererText(), text=INDEX_NEW_VERSION)
+    column_new_version.set_sort_column_id(INDEX_NEW_VERSION)
+    column_new_version.set_resizable(True)
 
-    column5 = gtk.TreeViewColumn(_("New version"), gtk.CellRendererText(), text=4)
-    column5.set_sort_column_id(4)
-    column5.set_resizable(True)
-
-    column6 = gtk.TreeViewColumn(_("Size"), gtk.CellRendererText(), text=10)
-    column6.set_sort_column_id(9)
-    column6.set_resizable(True)
-
-    treeview_update.append_column(column3)
-    treeview_update.append_column(column1)
-    treeview_update.append_column(column2)
-    treeview_update.append_column(column5)
-    treeview_update.append_column(column4)
-    treeview_update.append_column(column6)
+    column_size = gtk.TreeViewColumn(_("Size"), gtk.CellRendererText(), text=INDEX_STR_SIZE)
+    column_size.set_sort_column_id(INDEX_SIZE)
+    column_size.set_resizable(True)
+    
+    treeview_update.append_column(column_upgrade)
+    treeview_update.append_column(column_package)
+    treeview_update.append_column(column_old_version)
+    treeview_update.append_column(column_new_version)
+    treeview_update.append_column(column_size)
     treeview_update.set_headers_clickable(True)
     treeview_update.set_reorderable(False)
     treeview_update.show()
-    
+
     treeview_update.connect( "button-release-event", menuPopup, treeview_update, statusIcon, wTree )
 
-    model = gtk.TreeStore(str, str, gtk.gdk.Pixbuf, str, str, str, str, str, int, str)
-    model.set_sort_column_id( 7, gtk.SORT_ASCENDING )
+    model = gtk.TreeStore(str, str, str, str, int, str, str, str) # upgrade, pkgname, oldversion, newversion, size, strsize, description, sourcePackage)
+    model.set_sort_column_id( INDEX_PACKAGE_NAME, gtk.SORT_ASCENDING )
     treeview_update.set_model(model)
     del model
 
@@ -1556,6 +1566,7 @@ try:
     wTree.get_widget("tool_clear").connect("clicked", clear, treeview_update, statusbar, context_id)
     wTree.get_widget("tool_select_all").connect("clicked", select_all, treeview_update, statusbar, context_id)
     wTree.get_widget("tool_refresh").connect("clicked", force_refresh, treeview_update, statusIcon, wTree)
+    wTree.get_widget("tool_pack_info").connect("clicked", open_pack_info)
 
     menu = gtk.Menu()
     menuItem3 = gtk.ImageMenuItem(gtk.STOCK_REFRESH)
@@ -1576,12 +1587,13 @@ try:
     statusIcon.connect('popup-menu', popup_menu_cb, menu)
 
     # Set text for all visible widgets (because of i18n)
+    wTree.get_widget("tool_pack_info").set_label(_("Update Pack Info"))
     wTree.get_widget("tool_apply").set_label(_("Install Updates"))
     wTree.get_widget("tool_refresh").set_label(_("Refresh"))
     wTree.get_widget("tool_select_all").set_label(_("Select All"))
     wTree.get_widget("tool_clear").set_label(_("Clear"))
     wTree.get_widget("label9").set_text(_("Description"))
-    wTree.get_widget("label8").set_text(_("Changelog"))    
+    wTree.get_widget("label8").set_text(_("Changelog"))
 
     wTree.get_widget("label_error_detail").set_text("")
     wTree.get_widget("hbox_error").hide()
@@ -1627,34 +1639,28 @@ try:
     visibleColumnsMenu = gtk.Menu()
     visibleColumnsMenuItem.set_submenu(visibleColumnsMenu)
 
-    levelColumnMenuItem = gtk.CheckMenuItem(_("Level"))
-    levelColumnMenuItem.set_active(prefs["level_column_visible"])
-    column3.set_visible(prefs["level_column_visible"])
-    levelColumnMenuItem.connect("toggled", setVisibleColumn, column3, "level")
-    visibleColumnsMenu.append(levelColumnMenuItem)
-
     packageColumnMenuItem = gtk.CheckMenuItem(_("Package"))
     packageColumnMenuItem.set_active(prefs["package_column_visible"])
-    column2.set_visible(prefs["package_column_visible"])
-    packageColumnMenuItem.connect("toggled", setVisibleColumn, column2, "package")
+    column_package.set_visible(prefs["package_column_visible"])
+    packageColumnMenuItem.connect("toggled", setVisibleColumn, column_package, "package")
     visibleColumnsMenu.append(packageColumnMenuItem)
 
     oldVersionColumnMenuItem = gtk.CheckMenuItem(_("Old version"))
     oldVersionColumnMenuItem.set_active(prefs["old_version_column_visible"])
-    column4.set_visible(prefs["old_version_column_visible"])
-    oldVersionColumnMenuItem.connect("toggled", setVisibleColumn, column4, "old_version")
+    column_old_version.set_visible(prefs["old_version_column_visible"])
+    oldVersionColumnMenuItem.connect("toggled", setVisibleColumn, column_old_version, "old_version")
     visibleColumnsMenu.append(oldVersionColumnMenuItem)
 
     newVersionColumnMenuItem = gtk.CheckMenuItem(_("New version"))
     newVersionColumnMenuItem.set_active(prefs["new_version_column_visible"])
-    column5.set_visible(prefs["new_version_column_visible"])
-    newVersionColumnMenuItem.connect("toggled", setVisibleColumn, column5, "new_version")
+    column_new_version.set_visible(prefs["new_version_column_visible"])
+    newVersionColumnMenuItem.connect("toggled", setVisibleColumn, column_new_version, "new_version")
     visibleColumnsMenu.append(newVersionColumnMenuItem)
 
     sizeColumnMenuItem = gtk.CheckMenuItem(_("Size"))
     sizeColumnMenuItem.set_active(prefs["size_column_visible"])
-    column6.set_visible(prefs["size_column_visible"])
-    sizeColumnMenuItem.connect("toggled", setVisibleColumn, column6, "size")
+    column_size.set_visible(prefs["size_column_visible"])
+    sizeColumnMenuItem.connect("toggled", setVisibleColumn, column_size, "size")
     visibleColumnsMenu.append(sizeColumnMenuItem)
 
     viewSubmenu.append(visibleColumnsMenuItem)
@@ -1689,7 +1695,7 @@ try:
             wTree.get_widget("vpaned1").set_position(prefs['dimensions_pane_position'])
             app_hidden = False
 
-    if os.getuid() != 0 :        
+    if os.getuid() != 0 :
         #test the network connection to delay mintUpdate in case we're not yet connected
         log.writelines("++ Testing initial connection\n")
         log.flush()
@@ -1725,3 +1731,4 @@ except Exception, detail:
     log.writelines("-- Exception occured in main thread: " + str(detail) + "\n")
     log.flush()
     log.close()
+
