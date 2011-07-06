@@ -1,3 +1,9 @@
+mintupdate-debian (1.0.1) debian; urgency=low
+
+  * Improved detection of Mint repository mirrors
+
+ -- Clement Lefebvre <root@linuxmint.com>  Wed,  6 Jul 2011 14:33:00 +0000
+
 mintupdate-debian (1.0.0) debian; urgency=low
 
   * Initial version, based on mintupdate 4.3.2

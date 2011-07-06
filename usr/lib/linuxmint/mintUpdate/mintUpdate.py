@@ -1143,7 +1143,7 @@ def open_pack_info(widget):
         for item in acquire.items:
             repo = item.desc_uri
             if "Packages.bz2" in repo:
-                if "packages.linuxmint.com/dists/debian" in repo:
+                if ("packages.linuxmint.com/dists/debian" in repo) or ("dists/debian/upstream" in repo):
                     points_to_lm = True
                 if "debian.linuxmint.com/latest/dists" in repo:
                     points_to_lm_debian_latest = True
