@@ -477,7 +477,7 @@ class RefreshThread(threading.Thread):
                 updates = commands.getoutput("/usr/lib/linuxmint/mintUpdate/checkAPT.py --use-synaptic %s | grep \"###\"" % self.wTree.get_widget("window1").window.xid)
 
             # Look for mintupdate
-            if ("UPDATE###mintupdate###" in updates):
+            if ("UPDATE###mintupdate###" in updates) or ("UPDATE###mintupdate-debian###" in updates):
                 new_mintupdate = True
             else:
                 new_mintupdate = False
